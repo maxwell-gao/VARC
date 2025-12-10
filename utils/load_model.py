@@ -1,19 +1,21 @@
 import os
 from typing import Any, Dict, Optional
 import torch
-from src.ARC_ViT import ARCViT  
+from src.ARC_ViT import ARCViT
 from src.ARC_UNet import ARCUNet
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.amp import GradScaler
 from utils.lr_scheduler import get_cosine_schedule_with_warmup
 
+
 def count_parameters(model):
     ret = 0
     for name, p in model.named_parameters():
-        if p.requires_grad and 'task_token' not in name:
-            #print(name, p.numel())
+        if p.requires_grad and "task_token" not in name:
+            # print(name, p.numel())
             ret += p.numel()
     return ret
+
 
 def get_model_arch(args, train_dataset):
     if args.architecture == "vit":
@@ -49,19 +51,23 @@ def load_models(args, train_dataset, device, distributed, rank, local_rank):
         print(f"Resuming from checkpoint: {resume_checkpoint}")
         checkpoint = torch.load(resume_checkpoint, map_location=device)
         model = get_model_arch(args, train_dataset)
-    
+
         state_dict = checkpoint.get("model_state", {})
         state_dict = {
             key.replace("_orig_mod.", "", 1): value
             for key, value in checkpoint["model_state"].items()
         }
         if args.resume_skip_task_token and "task_token_embed.weight" in state_dict:
-            state_dict = {k: v for k, v in state_dict.items() if k != "task_token_embed.weight"}
+            state_dict = {
+                k: v for k, v in state_dict.items() if k != "task_token_embed.weight"
+            }
             missing, unexpected = model.load_state_dict(state_dict, strict=False)
             if missing:
                 print(f"Skipped loading parameters: {sorted(missing)}")
             if unexpected:
-                print(f"Unexpected parameters ignored from checkpoint: {sorted(unexpected)}")
+                print(
+                    f"Unexpected parameters ignored from checkpoint: {sorted(unexpected)}"
+                )
         else:
             try:
                 model.load_state_dict(state_dict)
@@ -79,13 +85,13 @@ def load_models(args, train_dataset, device, distributed, rank, local_rank):
                     ) from exc
                 raise
         model.to(device)
-        
+
         # Apply torch.compile for speedup (PyTorch 2.0+)
-        if not args.no_compile and hasattr(torch, 'compile'):
+        if not args.no_compile and hasattr(torch, "compile"):
             if (not distributed) or rank == 0:
                 print("Applying torch.compile for optimization...")
             model = torch.compile(model, mode=args.compile_mode)
-        
+
         if distributed:
             model = DDP(
                 model,
@@ -101,20 +107,28 @@ def load_models(args, train_dataset, device, distributed, rank, local_rank):
         # Optionally restore epoch
         if "epoch" in checkpoint and not resume_reset_epoch:
             start_epoch = checkpoint["epoch"] + 1
-        elif "epoch" in checkpoint and resume_reset_epoch and ((not distributed) or rank == 0):
-            print("Ignoring checkpoint epoch due to --resume-reset-epoch; restarting from epoch 1.")
+        elif (
+            "epoch" in checkpoint
+            and resume_reset_epoch
+            and ((not distributed) or rank == 0)
+        ):
+            print(
+                "Ignoring checkpoint epoch due to --resume-reset-epoch; restarting from epoch 1."
+            )
     else:
         model = get_model_arch(args, train_dataset)
-      
-        print(f"Parameter count: {count_parameters(model) / 1_000_000:.2f}M (excluding task tokens)")
+
+        print(
+            f"Parameter count: {count_parameters(model) / 1_000_000:.2f}M (excluding task tokens)"
+        )
         model.to(device)
-        
+
         # Apply torch.compile for speedup (PyTorch 2.0+)
-        if not args.no_compile and hasattr(torch, 'compile'):
+        if not args.no_compile and hasattr(torch, "compile"):
             if (not distributed) or rank == 0:
                 print("Applying torch.compile for optimization...")
             model = torch.compile(model, mode=args.compile_mode)
-        
+
         if distributed:
             model = DDP(
                 model,
@@ -137,11 +151,12 @@ def load_models(args, train_dataset, device, distributed, rank, local_rank):
             print("AMP disabled (CPU or --no-amp flag)")
 
     if args.lr_scheduler == "cosine":
-        scheduler = get_cosine_schedule_with_warmup(optimizer, min(args.epochs // 5, 10), args.epochs)
+        scheduler = get_cosine_schedule_with_warmup(
+            optimizer, min(args.epochs // 5, 10), args.epochs
+        )
     else:
         scheduler = None
     return model, model_for_eval, optimizer, scaler, scheduler, start_epoch
-
 
 
 def load_optimizer(args, model, device, distributed, rank):
@@ -158,11 +173,14 @@ def load_optimizer(args, model, device, distributed, rank):
         else:
             print("AMP disabled (CPU or --no-amp flag)")
     if args.lr_scheduler == "cosine":
-        scheduler = get_cosine_schedule_with_warmup(optimizer, min(args.epochs // 5, 10), args.epochs)
+        scheduler = get_cosine_schedule_with_warmup(
+            optimizer, min(args.epochs // 5, 10), args.epochs
+        )
     else:
         scheduler = None
 
     return optimizer, scaler, scheduler
+
 
 def load_model_only(args, train_dataset, device, distributed, rank, local_rank):
     resume_checkpoint = getattr(args, "resume_checkpoint", None)
@@ -170,19 +188,23 @@ def load_model_only(args, train_dataset, device, distributed, rank, local_rank):
         print(f"Resuming from checkpoint: {resume_checkpoint}")
         checkpoint = torch.load(resume_checkpoint, map_location=device)
         model = get_model_arch(args, train_dataset)
-    
+
         state_dict = checkpoint.get("model_state", {})
         state_dict = {
             key.replace("_orig_mod.", "", 1): value
             for key, value in checkpoint["model_state"].items()
         }
         if args.resume_skip_task_token and "task_token_embed.weight" in state_dict:
-            state_dict = {k: v for k, v in state_dict.items() if k != "task_token_embed.weight"}
+            state_dict = {
+                k: v for k, v in state_dict.items() if k != "task_token_embed.weight"
+            }
             missing, unexpected = model.load_state_dict(state_dict, strict=False)
             if missing:
                 print(f"Skipped loading parameters: {sorted(missing)}")
             if unexpected:
-                print(f"Unexpected parameters ignored from checkpoint: {sorted(unexpected)}")
+                print(
+                    f"Unexpected parameters ignored from checkpoint: {sorted(unexpected)}"
+                )
         else:
             try:
                 model.load_state_dict(state_dict)
@@ -200,13 +222,13 @@ def load_model_only(args, train_dataset, device, distributed, rank, local_rank):
                     ) from exc
                 raise
         model.to(device)
-        
+
         # Apply torch.compile for speedup (PyTorch 2.0+)
-        if not args.no_compile and hasattr(torch, 'compile'):
+        if not args.no_compile and hasattr(torch, "compile"):
             if (not distributed) or rank == 0:
                 print("Applying torch.compile for optimization...")
             model = torch.compile(model, mode=args.compile_mode)
-        
+
         if distributed:
             model = DDP(
                 model,

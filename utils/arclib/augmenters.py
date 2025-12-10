@@ -26,6 +26,7 @@ Concat: Concatenate the output of multiple augmenters
 IdentityAugmenter: Identity augmenter
 PermuteExamples: Permute the training examples in the task
 """
+
 import copy
 from typing import List, Optional, Tuple
 
@@ -54,8 +55,12 @@ class Augmenter:
         to_input: bool = True,
         to_output: bool = True,
     ) -> Example:
-        input = self.apply_to_grid(example.input, rng=rng) if to_input else example.input
-        output = self.apply_to_grid(example.output, rng=rng) if to_output else example.output
+        input = (
+            self.apply_to_grid(example.input, rng=rng) if to_input else example.input
+        )
+        output = (
+            self.apply_to_grid(example.output, rng=rng) if to_output else example.output
+        )
         if example.cot is not None:
             cot = copy.deepcopy(example.cot)
             if not np.array_equal(cot[-1], output):
@@ -64,8 +69,9 @@ class Augmenter:
             cot = None
         return Example(input, output, cot)
 
-    def apply_to_task(self, task: Task, rng: RandomState = None, share_rng=False, **kwargs) -> Task:
-
+    def apply_to_task(
+        self, task: Task, rng: RandomState = None, share_rng=False, **kwargs
+    ) -> Task:
         if self.share_rng:
             # make sure all examples get seperate copies of same rng
             # this is to make sure that the same random number(s) is used for all examples
@@ -81,7 +87,9 @@ class Augmenter:
                 self.apply_to_example(example, rng=rng_i, **kwargs)
                 for example, rng_i in zip(task.train_examples, train_rngs)
             ],
-            test_example=self.apply_to_example(task.test_example, rng=test_rng, **kwargs),
+            test_example=self.apply_to_example(
+                task.test_example, rng=test_rng, **kwargs
+            ),
             name=task.name,
         )
 
@@ -146,7 +154,6 @@ class PermuteColors(Augmenter):
         color_map = {0: 0}
 
         for color in colors:
-
             if color in color_map:
                 continue
 
@@ -172,7 +179,8 @@ class PermuteColors(Augmenter):
 
         return Task(
             train_examples=[
-                self.apply_to_example(example, rng=rng, **kwargs) for example in task.train_examples
+                self.apply_to_example(example, rng=rng, **kwargs)
+                for example in task.train_examples
             ],
             test_example=self.apply_to_example(task.test_example, rng=rng, **kwargs),
             name=task.name,
@@ -184,7 +192,6 @@ class PermuteColors(Augmenter):
 
 
 class PermuteColorswithMap(Augmenter):
-
     def __init__(self, color_map):
         self.color_map = color_map
 
@@ -241,7 +248,9 @@ class PermuteColorsRespectKeyColors(Augmenter):
 
         return key_colors, all_colors
 
-    def apply_to_task(self, task: Task, rng: RandomState = None, share_rng=False, **kwargs) -> Task:
+    def apply_to_task(
+        self, task: Task, rng: RandomState = None, share_rng=False, **kwargs
+    ) -> Task:
         key_colors, colors = PermuteColorsRespectKeyColors.get_key_colors(
             task, use_test_output=self.use_test_output
         )
@@ -265,7 +274,6 @@ class PermuteColorsRespectKeyColors(Augmenter):
         permuted_colors = rng.permutation(colors).tolist()
 
         for color in colors:
-
             if color in color_map:
                 continue
 
@@ -289,7 +297,8 @@ class PermuteColorsRespectKeyColors(Augmenter):
 
         return Task(
             train_examples=[
-                self.apply_to_example(example, rng=rng, **kwargs) for example in task.train_examples
+                self.apply_to_example(example, rng=rng, **kwargs)
+                for example in task.train_examples
             ],
             test_example=self.apply_to_example(task.test_example, rng=rng, **kwargs),
             name=task.name,
@@ -382,7 +391,9 @@ class Repeat(Augmenter):
         elif self.axis == 1:
             return np.concatenate([grid] * self.n, axis=1)
         elif self.axis == 2:
-            return np.concatenate([np.concatenate([grid] * self.n, axis=0)] * self.n, axis=1)
+            return np.concatenate(
+                [np.concatenate([grid] * self.n, axis=0)] * self.n, axis=1
+            )
         else:
             raise ValueError("Invalid axis")
 
@@ -468,10 +479,14 @@ class DropoutInput(Augmenter):
             x_start = int(grid.shape[0] * x_start_ratio)
             y_start = int(grid.shape[1] * y_start_ratio)
 
-            grid[x_start : x_start + x_len, y_start : y_start + y_len] = self.dropout_color
+            grid[x_start : x_start + x_len, y_start : y_start + y_len] = (
+                self.dropout_color
+            )
         return grid
 
-    def apply_to_task(self, task: Task, rng: RandomState = None, share_rng=False, **kwargs) -> Task:
+    def apply_to_task(
+        self, task: Task, rng: RandomState = None, share_rng=False, **kwargs
+    ) -> Task:
         # find unused colors in the task
         all_colors = set()
         for example in task.train_examples:
@@ -510,10 +525,14 @@ class DropoutOutput(Augmenter):
             x_start = int(grid.shape[0] * x_start_ratio)
             y_start = int(grid.shape[1] * y_start_ratio)
 
-            grid[x_start : x_start + x_len, y_start : y_start + y_len] = self.dropout_color
+            grid[x_start : x_start + x_len, y_start : y_start + y_len] = (
+                self.dropout_color
+            )
         return grid
 
-    def apply_to_task(self, task: Task, rng: RandomState = None, share_rng=False, **kwargs) -> Task:
+    def apply_to_task(
+        self, task: Task, rng: RandomState = None, share_rng=False, **kwargs
+    ) -> Task:
         # find unused colors in the task
         all_colors = set()
         for example in task.train_examples:
@@ -622,7 +641,9 @@ class RandomObjectRotate(Augmenter):
     def __str__(self):
         return f"RandomObjectRotate({self.angle})"
 
-    def apply_to_grid(self, grid: Grid, rng: RandomState = None, background_color: int = 0) -> Grid:
+    def apply_to_grid(
+        self, grid: Grid, rng: RandomState = None, background_color: int = 0
+    ) -> Grid:
         assert rng is not None
 
         components, background_color = find_connected_components(
@@ -662,13 +683,19 @@ class RandomObjectRotate(Augmenter):
 
 
 class PermuteExamples(Augmenter):
-    def apply_to_task(self, task: Task, rng: RandomState = None, share_rng=False, **kwargs) -> Task:
+    def apply_to_task(
+        self, task: Task, rng: RandomState = None, share_rng=False, **kwargs
+    ) -> Task:
         if rng is None:
             rng = RandomState()
 
         perm = rng.permutation(len(task.train_examples))
         train_examples = [task.train_examples[i] for i in perm]
-        return Task(train_examples=train_examples, test_example=task.test_example, name=task.name)
+        return Task(
+            train_examples=train_examples,
+            test_example=task.test_example,
+            name=task.name,
+        )
 
 
 class RandomObjectTranslateXY(Augmenter):
@@ -678,7 +705,10 @@ class RandomObjectTranslateXY(Augmenter):
         return "RandomObjectTranslateXY()"
 
     def apply_to_grid(
-        self, grid: Grid, rng: RandomState = None, background_color: Optional[int] = None
+        self,
+        grid: Grid,
+        rng: RandomState = None,
+        background_color: Optional[int] = None,
     ) -> Grid:
         assert rng is not None
 
@@ -720,9 +750,13 @@ class Chain(Augmenter):
     def __str__(self):
         return f"Chain({self.augmenters})"
 
-    def apply_to_task(self, task: Task, rng: RandomState = None, share_rng=False, **kwargs) -> Task:
+    def apply_to_task(
+        self, task: Task, rng: RandomState = None, share_rng=False, **kwargs
+    ) -> Task:
         for augmenter in self.augmenters:
-            task = augmenter.apply_to_task(task, rng=rng, share_rng=augmenter.share_rng, **kwargs)
+            task = augmenter.apply_to_task(
+                task, rng=rng, share_rng=augmenter.share_rng, **kwargs
+            )
         return task
 
     def apply_to_example(
@@ -889,8 +923,12 @@ both_augmenters_probs = [
 ]
 
 # normalize
-input_augmenters_probs = [p / sum(input_augmenters_probs) for p in input_augmenters_probs]
-output_augmenters_probs = [p / sum(output_augmenters_probs) for p in output_augmenters_probs]
+input_augmenters_probs = [
+    p / sum(input_augmenters_probs) for p in input_augmenters_probs
+]
+output_augmenters_probs = [
+    p / sum(output_augmenters_probs) for p in output_augmenters_probs
+]
 both_augmenters_probs = [p / sum(both_augmenters_probs) for p in both_augmenters_probs]
 
 
@@ -914,7 +952,6 @@ def apply_a_random_augmentation(task: Task, rng=None) -> Tuple[Task, Augmenter, 
 
 
 if __name__ == "__main__":
-
     grid = np.array(
         [
             [1, 1, 1, 1, 1, 1, 1],
@@ -928,8 +965,12 @@ if __name__ == "__main__":
     rng = RandomState(45)
     task = Task(train_examples=[Example(grid, grid)], test_example=Example(grid, grid))
 
-    drop_task = DropoutOutput().apply_to_task(task, rng=rng, to_input=False, to_output=True)
-    drop_task_input = DropoutInput().apply_to_task(task, rng=rng, to_input=True, to_output=False)
+    drop_task = DropoutOutput().apply_to_task(
+        task, rng=rng, to_input=False, to_output=True
+    )
+    drop_task_input = DropoutInput().apply_to_task(
+        task, rng=rng, to_input=True, to_output=False
+    )
 
     grid1 = np.array(
         [
@@ -964,9 +1005,15 @@ if __name__ == "__main__":
 
     for _ in range(1000):
         ttask, augmenterr, category = apply_a_random_augmentation(task, rng=rng)
-        assert np.array_equal(ttask.train_examples[0].output, ttask.train_examples[1].output)
-        assert np.array_equal(ttask.train_examples[0].output, ttask.train_examples[2].output)
-        assert not np.array_equal(ttask.train_examples[0].output, ttask.train_examples[3].output)
+        assert np.array_equal(
+            ttask.train_examples[0].output, ttask.train_examples[1].output
+        )
+        assert np.array_equal(
+            ttask.train_examples[0].output, ttask.train_examples[2].output
+        )
+        assert not np.array_equal(
+            ttask.train_examples[0].output, ttask.train_examples[3].output
+        )
 
     # apply permute colors
     permute_colors = PermuteColors()

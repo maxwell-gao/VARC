@@ -6,6 +6,7 @@ from torch import nn
 
 from timm.models.vision_transformer import PatchEmbed
 
+
 class MultiHeadSelfAttention(nn.Module):
     def __init__(
         self,
@@ -22,7 +23,7 @@ class MultiHeadSelfAttention(nn.Module):
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
 
         if self.head_dim % 2 != 0:
             raise ValueError("Rotary embeddings require the head dimension to be even")
@@ -35,7 +36,7 @@ class MultiHeadSelfAttention(nn.Module):
         half_head_dim = embed_dim // num_heads // 2
         self.rotary = VisionRotaryEmbeddingFast(
             dim=half_head_dim,
-            pt_seq_len=int(max_seq_len ** 0.5),
+            pt_seq_len=int(max_seq_len**0.5),
             no_rope=no_rope,
         )
 
@@ -176,7 +177,7 @@ class ARCViT(nn.Module):
         mlp_dim: int = 512,
         dropout: float = 0.1,
         num_task_tokens: int = 1,
-        patch_size: int = 2
+        patch_size: int = 2,
     ) -> None:
         super().__init__()
 
@@ -193,13 +194,17 @@ class ARCViT(nn.Module):
         if patch_size is None:
             self.seq_length = image_size * image_size
         else:
-            self.seq_length = (image_size//patch_size)**2
+            self.seq_length = (image_size // patch_size) ** 2
         self.patch_size = patch_size
         print(f"Patch size: {self.patch_size}, sequence length: {self.seq_length}")
         self.num_task_tokens = num_task_tokens
         self.color_embed = nn.Embedding(num_colors, embed_dim)
-        self.task_token_embed = nn.Embedding(num_tasks, embed_dim * self.num_task_tokens)
-        self.patch_embed = PatchEmbed(image_size, patch_size, embed_dim, embed_dim, bias=True)
+        self.task_token_embed = nn.Embedding(
+            num_tasks, embed_dim * self.num_task_tokens
+        )
+        self.patch_embed = PatchEmbed(
+            image_size, patch_size, embed_dim, embed_dim, bias=True
+        )
 
         total_seq_len = self.num_task_tokens + self.seq_length
         self.positional_embed = nn.Parameter(torch.zeros(1, self.seq_length, embed_dim))
@@ -211,11 +216,13 @@ class ARCViT(nn.Module):
             dropout=dropout,
             max_seq_len=total_seq_len,
             no_rope=num_task_tokens,
-            )
+        )
 
         self.dropout = nn.Dropout(dropout)
         self.norm = nn.LayerNorm(embed_dim)
-        self.head = nn.Linear(embed_dim, num_colors * (1 if patch_size is None else patch_size)**2)
+        self.head = nn.Linear(
+            embed_dim, num_colors * (1 if patch_size is None else patch_size) ** 2
+        )
         self._reset_parameters()
 
     def _reset_parameters(self) -> None:
@@ -230,10 +237,12 @@ class ARCViT(nn.Module):
         task_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor | Tuple[torch.Tensor, torch.Tensor]:
-
         if pixel_values.dim() != 3:
             raise ValueError("`pixel_values` must be (batch, height, width).")
-        if pixel_values.size(1) != self.image_size or pixel_values.size(2) != self.image_size:
+        if (
+            pixel_values.size(1) != self.image_size
+            or pixel_values.size(2) != self.image_size
+        ):
             raise ValueError(
                 "`pixel_values` height/width must match configured image_size="
                 f"{self.image_size}. Received {pixel_values.shape[1:]}"
@@ -254,27 +263,52 @@ class ARCViT(nn.Module):
         key_padding_mask = None
         if attention_mask is not None:
             if attention_mask.shape != (batch_size, self.image_size, self.image_size):
-                raise ValueError(
-                    "`attention_mask` must match pixel grid size."
-                )
+                raise ValueError("`attention_mask` must match pixel grid size.")
             if self.patch_size is not None:
-                attention_mask = attention_mask.reshape(batch_size, self.image_size//self.patch_size, self.patch_size, self.image_size//self.patch_size, self.patch_size)
-                attention_mask = torch.max(torch.max(attention_mask, dim=2)[0], dim=3)[0]
+                attention_mask = attention_mask.reshape(
+                    batch_size,
+                    self.image_size // self.patch_size,
+                    self.patch_size,
+                    self.image_size // self.patch_size,
+                    self.patch_size,
+                )
+                attention_mask = torch.max(torch.max(attention_mask, dim=2)[0], dim=3)[
+                    0
+                ]
             flat_mask = attention_mask.view(batch_size, self.seq_length)
             pad_mask = ~flat_mask.bool()
             pad_mask = torch.cat(
-                [torch.zeros(batch_size, self.num_task_tokens, device=device, dtype=torch.bool), pad_mask],
+                [
+                    torch.zeros(
+                        batch_size,
+                        self.num_task_tokens,
+                        device=device,
+                        dtype=torch.bool,
+                    ),
+                    pad_mask,
+                ],
                 dim=1,
             )
             key_padding_mask = pad_mask
 
         encoded = self.encoder(hidden_states, key_padding_mask=key_padding_mask)
         encoded = self.norm(encoded)
-        pixel_states = encoded[:, self.num_task_tokens:, :]
+        pixel_states = encoded[:, self.num_task_tokens :, :]
 
         logits = self.head(pixel_states)
-        logits = logits.reshape((-1, self.image_size//self.patch_size, self.image_size//self.patch_size, self.patch_size, self.patch_size, self.num_colors))
+        logits = logits.reshape(
+            (
+                -1,
+                self.image_size // self.patch_size,
+                self.image_size // self.patch_size,
+                self.patch_size,
+                self.patch_size,
+                self.num_colors,
+            )
+        )
         logits = logits.permute((0, 1, 3, 2, 4, 5))
-        logits = logits.reshape(batch_size, self.image_size, self.image_size, self.num_colors)
+        logits = logits.reshape(
+            batch_size, self.image_size, self.image_size, self.num_colors
+        )
         logits = logits.permute(0, 3, 1, 2)
         return logits

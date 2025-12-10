@@ -30,8 +30,19 @@ def set_seed(seed: int) -> None:
     torch.cuda.manual_seed_all(seed)
 
 
-def ttt_once(model, device, distributed, rank, train_loader, train_sampler, eval_loader, cur_attempt_idx):
-    autocast_device_type = device.type if device.type in {"cuda", "cpu", "mps"} else "cuda"
+def ttt_once(
+    model,
+    device,
+    distributed,
+    rank,
+    train_loader,
+    train_sampler,
+    eval_loader,
+    cur_attempt_idx,
+):
+    autocast_device_type = (
+        device.type if device.type in {"cuda", "cpu", "mps"} else "cuda"
+    )
     is_main_process = (not distributed) or rank == 0
 
     global_start = time.time()
@@ -58,9 +69,11 @@ def ttt_once(model, device, distributed, rank, train_loader, train_sampler, eval
                 task_ids = batch["task_ids"].to(device)
 
                 optimizer.zero_grad(set_to_none=True)
-                
+
                 # Use automatic mixed precision
-                with autocast(device_type=autocast_device_type, enabled=scaler.is_enabled()):
+                with autocast(
+                    device_type=autocast_device_type, enabled=scaler.is_enabled()
+                ):
                     logits = model(inputs, task_ids, attention_mask=attention_mask)
                     num_colors = logits.size(1)
                     logits_flat = logits.permute(0, 2, 3, 1).reshape(-1, num_colors)
@@ -85,11 +98,11 @@ def ttt_once(model, device, distributed, rank, train_loader, train_sampler, eval
 
                 # Backward pass with gradient scaling
                 scaler.scale(loss).backward()
-                
+
                 # Unscale gradients before clipping
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-                
+
                 # Optimizer step with scaler
                 scaler.step(optimizer)
                 scaler.update()
@@ -97,7 +110,9 @@ def ttt_once(model, device, distributed, rank, train_loader, train_sampler, eval
                 running_loss += loss.item() * batch_size
                 sample_count += batch_size
 
-                if total_batches > 0 and is_main_process and step % 10 == 0:  # Update every 10 steps
+                if (
+                    total_batches > 0 and is_main_process and step % 10 == 0
+                ):  # Update every 10 steps
                     elapsed = time.time() - epoch_start
                     avg_step_time = elapsed / step
                     steps_completed = previous_total_steps + step
@@ -129,7 +144,12 @@ def ttt_once(model, device, distributed, rank, train_loader, train_sampler, eval
             )
             if distributed and dist.is_initialized():
                 dist.all_reduce(train_totals, op=dist.ReduceOp.SUM)
-            running_loss_total, sample_count_total, train_exact_total, train_examples_total = train_totals.tolist()
+            (
+                running_loss_total,
+                sample_count_total,
+                train_exact_total,
+                train_examples_total,
+            ) = train_totals.tolist()
             avg_train_loss = running_loss_total / max(sample_count_total, 1)
             train_acc = train_exact_total / max(train_examples_total, 1)
 
@@ -148,8 +168,12 @@ def ttt_once(model, device, distributed, rank, train_loader, train_sampler, eval
                 f"eta_total={_format_eta(total_eta)}",
             ]
 
-            current_lr = optimizer.param_groups[0]["lr"] if optimizer.param_groups else args.learning_rate
-            log_parts.append(f"lr={current_lr:.6f}")           
+            current_lr = (
+                optimizer.param_groups[0]["lr"]
+                if optimizer.param_groups
+                else args.learning_rate
+            )
+            log_parts.append(f"lr={current_lr:.6f}")
             if is_main_process:
                 print(" | ".join(log_parts))
 
@@ -178,11 +202,19 @@ def ttt_once(model, device, distributed, rank, train_loader, train_sampler, eval
         task_type=args.data_root.split("/")[-1],  # e.g., "ARC-AGI"
     )
 
+
 def train(args: argparse.Namespace) -> None:
     distributed, rank, world_size, local_rank, device = init_distributed_mode(args)
     set_seed(args.seed + (rank if distributed else 0))
 
-    train_dataset, train_loader, eval_dataset, eval_loader, train_sampler, eval_sampler = build_dataloaders(
+    (
+        train_dataset,
+        train_loader,
+        eval_dataset,
+        eval_loader,
+        train_sampler,
+        eval_sampler,
+    ) = build_dataloaders(
         args,
         distributed=distributed,
         rank=rank,
@@ -194,18 +226,30 @@ def train(args: argparse.Namespace) -> None:
     if (not distributed) or rank == 0:
         print(f"Total training examples: {total_train_examples}")
 
-
     model_original = load_model_only(
-        args=args, train_dataset=train_dataset, device=device, distributed=distributed, rank=rank, local_rank=local_rank
+        args=args,
+        train_dataset=train_dataset,
+        device=device,
+        distributed=distributed,
+        rank=rank,
+        local_rank=local_rank,
     )
-    
+
     for attempt_idx in range(args.ttt_num_each):
         model = deepcopy(model_original)
-        print(f"Starting test-time training attempt {attempt_idx + 1}/{args.ttt_num_each}...")
-        ttt_once(model=model, device=device, distributed=distributed, rank=rank,
-                train_loader=train_loader, train_sampler=train_sampler,
-                eval_loader=eval_loader, cur_attempt_idx=attempt_idx)
-
+        print(
+            f"Starting test-time training attempt {attempt_idx + 1}/{args.ttt_num_each}..."
+        )
+        ttt_once(
+            model=model,
+            device=device,
+            distributed=distributed,
+            rank=rank,
+            train_loader=train_loader,
+            train_sampler=train_sampler,
+            eval_loader=eval_loader,
+            cur_attempt_idx=attempt_idx,
+        )
 
 
 if __name__ == "__main__":

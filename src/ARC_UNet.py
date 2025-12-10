@@ -4,6 +4,7 @@ import torch
 from torch import nn
 from diffusers import UNet2DConditionModel
 
+
 class ARCUNet(nn.Module):
     """UNet tailored for ARC tasks, repurposed from HuggingFace
     implementation.
@@ -25,7 +26,7 @@ class ARCUNet(nn.Module):
         num_tasks: int,
         image_size: int = 64,
         num_colors: int = 10,
-        size: str = 'medium',
+        size: str = "medium",
         num_task_tokens: int = 1,
     ) -> None:
         super().__init__()
@@ -39,11 +40,11 @@ class ARCUNet(nn.Module):
         self.image_size = image_size
         self.num_task_tokens = num_task_tokens
 
-        if size == 'small':
+        if size == "small":
             embed_dim = 160
-        elif size == 'medium':
+        elif size == "medium":
             embed_dim = 240
-        elif size == 'big':
+        elif size == "big":
             embed_dim = 320
 
         self.color_embed = nn.Embedding(num_colors, 4)
@@ -63,12 +64,13 @@ class ARCUNet(nn.Module):
                 "CrossAttnUpBlock2D",
                 "CrossAttnUpBlock2D",
             ),
-            mid_block_type = 'UNetMidBlock2DCrossAttn' if size == 'big' else None,
-            block_out_channels=(embed_dim//2, embed_dim, embed_dim),
+            mid_block_type="UNetMidBlock2DCrossAttn" if size == "big" else None,
+            block_out_channels=(embed_dim // 2, embed_dim, embed_dim),
             cross_attention_dim=embed_dim,
-            layers_per_block=2 if size == 'big' else 1,
-            attention_head_dim=embed_dim//40, # actually "num_attention_heads", naming issue
-            norm_num_groups=embed_dim//10,
+            layers_per_block=2 if size == "big" else 1,
+            attention_head_dim=embed_dim
+            // 40,  # actually "num_attention_heads", naming issue
+            norm_num_groups=embed_dim // 10,
         )
 
         self._reset_parameters()
@@ -84,10 +86,12 @@ class ARCUNet(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         return_class_logits: bool = False,
     ) -> torch.Tensor | Tuple[torch.Tensor, torch.Tensor]:
-
         if pixel_values.dim() != 3:
             raise ValueError("`pixel_values` must be (batch, height, width).")
-        if pixel_values.size(1) != self.image_size or pixel_values.size(2) != self.image_size:
+        if (
+            pixel_values.size(1) != self.image_size
+            or pixel_values.size(2) != self.image_size
+        ):
             raise ValueError(
                 "`pixel_values` height/width must match configured image_size="
                 f"{self.image_size}. Received {pixel_values.shape[1:]}"

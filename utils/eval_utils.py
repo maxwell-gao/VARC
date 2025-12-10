@@ -24,6 +24,7 @@ COLOR_PALETTE = [
     "#FFFFFF",
 ]
 
+
 def _identity_transform(grid):
     return grid
 
@@ -92,10 +93,7 @@ def _apply_color_map_to_grid(grid, inverse_color_map: Optional[Dict[int, int]]):
     else:
         iterable = grid
 
-    return [
-        [inverse_color_map.get(value, value) for value in row]
-        for row in iterable
-    ]
+    return [[inverse_color_map.get(value, value) for value in row] for row in iterable]
 
 
 def _undo_eval_rot_grid(grid, suffix: str):
@@ -152,6 +150,7 @@ def get_majority_vote(predictions):
     ]
     return sorted_lists
 
+
 def extrac_grid(offset, pred, img_size):
     offset_x, offset_y = offset
     np_predict = np.array(pred).reshape(img_size, img_size)
@@ -163,6 +162,7 @@ def extrac_grid(offset, pred, img_size):
         len_y += 1
     predict_grid = np_predict_grid[:len_y, :len_x].tolist()
     return predict_grid
+
 
 def majority_vote_downsample(predict_grid, scale_factor):
     downsampled_grid = []
@@ -182,6 +182,7 @@ def majority_vote_downsample(predict_grid, scale_factor):
     predict_grid = downsampled_grid
     return predict_grid
 
+
 @torch.no_grad()
 def generate_predictions(
     model: torch.nn.Module,
@@ -193,7 +194,7 @@ def generate_predictions(
     fix_scale_factor: int = 1,
     disable_translation: bool = False,
     if_fix_scale: bool = False,
-    save_name = "ttt_eval",
+    save_name="ttt_eval",
 ) -> None:
     model.eval()
     answer_set = {}
@@ -227,8 +228,8 @@ def generate_predictions(
             inputs = batch["inputs"].to(device)
             attention_mask = batch["attention_mask"].to(device)
             task_ids = batch["task_ids"].to(device)
-            offsets = batch['offset'].to(device)
-            scale_factors = batch['scale_factors'].to(device)
+            offsets = batch["offset"].to(device)
+            scale_factors = batch["scale_factors"].to(device)
 
             logits = model(inputs, task_ids, attention_mask=attention_mask)
             preds = logits.argmax(dim=1).cpu()
@@ -250,23 +251,26 @@ def generate_predictions(
                 task_predictions = answer_set.setdefault(base_task_name, {})
                 if cur_index not in task_predictions:
                     task_predictions[cur_index] = []
-              
+
                 try:
                     predict_grid = extrac_grid(offsets[idx], preds[idx], img_size)
                     predict_grid = undo_fn(predict_grid)
                     if scale_factor > 1:
-                        predict_grid = majority_vote_downsample(predict_grid, scale_factor)
+                        predict_grid = majority_vote_downsample(
+                            predict_grid, scale_factor
+                        )
                     predict_grid = _apply_color_map_to_grid(
                         predict_grid, color_inverse_map
                     )
                 except Exception as e:
-                    print(f"Error processing prediction for task {task_name}, index {cur_index}: {e}")
+                    print(
+                        f"Error processing prediction for task {task_name}, index {cur_index}: {e}"
+                    )
                     exit()
                 task_predictions[cur_index].append(predict_grid)
 
     assert len(answer_set.keys()) == 1, "Only support one task for TTT evaluation."
     task_name = list(answer_set.keys())[0]
-    os.makedirs(f'outputs/{save_name}', exist_ok=True)
-    with open(f'outputs/{save_name}/{task_name}_predictions.json', 'w') as f:
+    os.makedirs(f"outputs/{save_name}", exist_ok=True)
+    with open(f"outputs/{save_name}/{task_name}_predictions.json", "w") as f:
         json.dump(answer_set[task_name], f)
-   

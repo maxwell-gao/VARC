@@ -12,6 +12,7 @@ IGNORE_INDEX = 10
 PAD_INDEX = 11
 MAX_SIZE = 30
 
+
 def collate_fn(batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
     """
     For parallel training
@@ -23,7 +24,9 @@ def collate_fn(batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
     target_shapes = torch.stack([item["target_shape"] for item in batch], dim=0)
     example_indices = torch.stack([item["example_index"] for item in batch], dim=0)
     offset = torch.stack([torch.tensor(item["offset"]) for item in batch], dim=0)
-    scale_factors = torch.stack([torch.tensor(item["scale_factor"]) for item in batch], dim=0)
+    scale_factors = torch.stack(
+        [torch.tensor(item["scale_factor"]) for item in batch], dim=0
+    )
     task_names = [item["task_name"] for item in batch]
     raw_inputs = [item["raw_input"] for item in batch]
     raw_outputs = [item["raw_output"] for item in batch]
@@ -42,7 +45,13 @@ def collate_fn(batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
     }
 
 
-def pad_grid_with_translation(grid: List[List[int]], max_size: int, x_offset: int, y_offset: int, output_shape=True) -> Tuple[torch.Tensor, torch.Tensor, int, int]:
+def pad_grid_with_translation(
+    grid: List[List[int]],
+    max_size: int,
+    x_offset: int,
+    y_offset: int,
+    output_shape=True,
+) -> Tuple[torch.Tensor, torch.Tensor, int, int]:
     """
     Do random translation and padding
     Returns:
@@ -62,14 +71,15 @@ def pad_grid_with_translation(grid: List[List[int]], max_size: int, x_offset: in
     mask = torch.zeros((max_size, max_size), dtype=torch.long)
 
     values = torch.tensor(grid, dtype=torch.long)
-    tensor[y_offset:y_offset+height, x_offset:x_offset+width] = values
-    mask[y_offset:y_offset+height, x_offset:x_offset+width] = 1
+    tensor[y_offset : y_offset + height, x_offset : x_offset + width] = values
+    mask[y_offset : y_offset + height, x_offset : x_offset + width] = 1
 
     if output_shape:
-        tensor[y_offset: y_offset + height, x_offset + width] = PAD_INDEX
-        tensor[y_offset + height, x_offset: x_offset + width + 1] = PAD_INDEX
-        mask[y_offset:y_offset+height+1, x_offset:x_offset+width+1] = 1
+        tensor[y_offset : y_offset + height, x_offset + width] = PAD_INDEX
+        tensor[y_offset + height, x_offset : x_offset + width + 1] = PAD_INDEX
+        mask[y_offset : y_offset + height + 1, x_offset : x_offset + width + 1] = 1
     return tensor, mask, height, width
+
 
 def resolution_augmentation(example, max_cur_x, max_cur_y, rng, img_size=60):
     """
@@ -79,13 +89,18 @@ def resolution_augmentation(example, max_cur_x, max_cur_y, rng, img_size=60):
     3. Return the new example and scale factor
     """
     max_len = max(max_cur_x, max_cur_y)
-    max_scale_factor = (img_size // max_len)
+    max_scale_factor = img_size // max_len
     scale_factor = rng.randint(1, max_scale_factor)
     new_example = {}
-    new_example['input'] = np.repeat(np.repeat(example['input'], scale_factor, axis=0), scale_factor, axis=1).tolist()
-    new_example['output'] = np.repeat(np.repeat(example['output'], scale_factor, axis=0), scale_factor, axis=1).tolist()
+    new_example["input"] = np.repeat(
+        np.repeat(example["input"], scale_factor, axis=0), scale_factor, axis=1
+    ).tolist()
+    new_example["output"] = np.repeat(
+        np.repeat(example["output"], scale_factor, axis=0), scale_factor, axis=1
+    ).tolist()
 
     return new_example, scale_factor
+
 
 class ARCDataset(Dataset):
     def __init__(
@@ -106,7 +121,9 @@ class ARCDataset(Dataset):
         self.subset = subset
 
         self.samples: List[Dict[str, torch.Tensor]] = []
-        self.task_lookup: Dict[str, int] = dict(task_lookup) if task_lookup is not None else {}
+        self.task_lookup: Dict[str, int] = (
+            dict(task_lookup) if task_lookup is not None else {}
+        )
 
         split_dir = self.root / "data" / split
         files = sorted(split_dir.glob("*.json"))
@@ -115,7 +132,7 @@ class ARCDataset(Dataset):
         self.fix_scale_factor = 2
         self.resolution_enabled = True
 
-        print('Start loading data...')
+        print("Start loading data...")
         for file_path in files:
             task_name = file_path.stem
             if task_lookup is None:
@@ -133,7 +150,7 @@ class ARCDataset(Dataset):
                 task_data = json.load(fh)
 
             examples = task_data.get(examples_key, [])
-         
+
             # Load the original training/test examples, and do translation and scaling augmentation on-the-fly
             for example_index, example in enumerate(examples):
                 max_cur_y = len(example["input"])
@@ -145,19 +162,25 @@ class ARCDataset(Dataset):
                     continue
 
                 self.samples.append(
-                    {"example": example, "task_index": task_index,
-                        "task_name": task_name, "example_index": example_index}
+                    {
+                        "example": example,
+                        "task_index": task_index,
+                        "task_name": task_name,
+                        "example_index": example_index,
+                    }
                 )
         # Load RE-ARC extra training data if specified
         if subset == "train" and extra_train_roots:
             for extra_root in extra_train_roots:
-                self._load_extra_training_data_rearc(Path(extra_root), extra_train_limit)
+                self._load_extra_training_data_rearc(
+                    Path(extra_root), extra_train_limit
+                )
 
         if not self.samples:
             raise RuntimeError(
                 f"No samples found for split '{split}' subset '{subset}' under {split_dir}."
             )
-        print('Finish loading!!')
+        print("Finish loading!!")
         self.num_tasks = len(self.task_lookup)
 
     def __len__(self) -> int:
@@ -181,13 +204,13 @@ class ARCDataset(Dataset):
     def disable_resolution_augmentation(self, fix_scale_factor=2):
         self.fix_scale_factor = fix_scale_factor
         self.resolution_enabled = False
-    
+
     def enable_resolution_augmentation(self):
         self.resolution_enabled = True
 
     def disable_translation(self):
         self.translation_enabled = False
-    
+
     def _get_or_add_task_index(self, task_name: str) -> int:
         if task_name in self.task_lookup:
             return self.task_lookup[task_name]
@@ -195,7 +218,9 @@ class ARCDataset(Dataset):
         self.task_lookup[task_name] = task_index
         return task_index
 
-    def process_per_example(self, example, task_index, task_name, example_index, rng, if_translation=True):
+    def process_per_example(
+        self, example, task_index, task_name, example_index, rng, if_translation=True
+    ):
         """
         Conduct random translation and resolution augmentation for each example
         1. Randomly scale up the input and output grids
@@ -217,37 +242,57 @@ class ARCDataset(Dataset):
                 scale_factor: scale factor used for resolution augmentation
         """
         max_cur_y = len(example["input"])
-        max_cur_x = len(example["input"][0]) 
+        max_cur_x = len(example["input"][0])
         if "output" in example:
             max_cur_y = max(max_cur_y, len(example["output"]))
             max_cur_x = max(max_cur_x, len(example["output"][0]))
         max_img_size = self.max_size - 2  # Leave border
         max_size = self.max_size
         if self.resolution_enabled:
-            example, scale_factor = resolution_augmentation(example, max_cur_x, max_cur_y, rng, img_size=max_img_size)
+            example, scale_factor = resolution_augmentation(
+                example, max_cur_x, max_cur_y, rng, img_size=max_img_size
+            )
         else:
             scale_factor = self.fix_scale_factor
             new_example = {}
-            new_example['input'] = np.repeat(np.repeat(example['input'], scale_factor, axis=0), scale_factor, axis=1).tolist()
-            new_example['output'] = np.repeat(np.repeat(example['output'], scale_factor, axis=0), scale_factor, axis=1).tolist()
+            new_example["input"] = np.repeat(
+                np.repeat(example["input"], scale_factor, axis=0), scale_factor, axis=1
+            ).tolist()
+            new_example["output"] = np.repeat(
+                np.repeat(example["output"], scale_factor, axis=0), scale_factor, axis=1
+            ).tolist()
             example = new_example
-            
+
         max_cur_x = max_cur_x * scale_factor
         max_cur_y = max_cur_y * scale_factor
 
         if if_translation:
-            x_offset = rng.randint(1, max_img_size - max_cur_x) if max_img_size > max_cur_x else 1
-            y_offset = rng.randint(1, max_img_size - max_cur_y) if max_img_size > max_cur_y else 1
+            x_offset = (
+                rng.randint(1, max_img_size - max_cur_x)
+                if max_img_size > max_cur_x
+                else 1
+            )
+            y_offset = (
+                rng.randint(1, max_img_size - max_cur_y)
+                if max_img_size > max_cur_y
+                else 1
+            )
         else:
             x_offset = 1
             y_offset = 1
 
-        input_grid, input_mask, _, _ = pad_grid_with_translation(example["input"], max_size, x_offset, y_offset, output_shape=False)
+        input_grid, input_mask, _, _ = pad_grid_with_translation(
+            example["input"], max_size, x_offset, y_offset, output_shape=False
+        )
 
         if "output" in example:
-            target_grid, target_mask, target_h, target_w = pad_grid_with_translation(example["output"], max_size, x_offset, y_offset, output_shape=True)
+            target_grid, target_mask, target_h, target_w = pad_grid_with_translation(
+                example["output"], max_size, x_offset, y_offset, output_shape=True
+            )
         else:
-            target_grid = torch.full((max_size, max_size), IGNORE_INDEX, dtype=torch.long)
+            target_grid = torch.full(
+                (max_size, max_size), IGNORE_INDEX, dtype=torch.long
+            )
             target_mask = torch.zeros((max_size, max_size), dtype=torch.long)
             target_h = 0
             target_w = 0
@@ -259,24 +304,27 @@ class ARCDataset(Dataset):
         raw_output = example.get("output") if "output" in example else None
 
         return {
-                "inputs": input_grid,
-                "attention_mask": input_mask,
-                "targets": target_grid,
-                "task_id": torch.tensor(task_index, dtype=torch.long),
-                "task_name": task_name,
-                "example_index": torch.tensor(example_index, dtype=torch.long),
-                "target_shape": torch.tensor([target_h, target_w], dtype=torch.long),
-                "raw_input": raw_input,
-                "raw_output": raw_output,
-                "offset": (x_offset, y_offset),
-                "scale_factor": scale_factor,
-            }
+            "inputs": input_grid,
+            "attention_mask": input_mask,
+            "targets": target_grid,
+            "task_id": torch.tensor(task_index, dtype=torch.long),
+            "task_name": task_name,
+            "example_index": torch.tensor(example_index, dtype=torch.long),
+            "target_shape": torch.tensor([target_h, target_w], dtype=torch.long),
+            "raw_input": raw_input,
+            "raw_output": raw_output,
+            "offset": (x_offset, y_offset),
+            "scale_factor": scale_factor,
+        }
 
-
-    def _load_extra_training_data_rearc(self, extra_root: Path, limit_per_task: Optional[int]) -> None:
+    def _load_extra_training_data_rearc(
+        self, extra_root: Path, limit_per_task: Optional[int]
+    ) -> None:
         tasks_dir = extra_root / "tasks"
         if not tasks_dir.exists():
-            raise RuntimeError(f"Expected 'tasks' directory under {extra_root} for extra training data.")
+            raise RuntimeError(
+                f"Expected 'tasks' directory under {extra_root} for extra training data."
+            )
 
         files = sorted(tasks_dir.glob("*.json"))
         rng = random.Random(42)
@@ -291,7 +339,7 @@ class ARCDataset(Dataset):
                 rng.shuffle(examples)
             else:
                 limit_per_task = len(examples)
-            cur_samples = []       
+            cur_samples = []
             for example_index, example in enumerate(examples):
                 max_cur_y = len(example["input"])
                 max_cur_x = len(example["input"][0])
@@ -301,8 +349,12 @@ class ARCDataset(Dataset):
                 if max_cur_y > MAX_SIZE or max_cur_x > MAX_SIZE:
                     continue
                 cur_samples.append(
-                    {"example": example, "task_index": task_index, 
-                     "task_name": task_name, "example_index": example_index}
+                    {
+                        "example": example,
+                        "task_index": task_index,
+                        "task_name": task_name,
+                        "example_index": example_index,
+                    }
                 )
                 if len(cur_samples) >= limit_per_task:
                     break
@@ -310,7 +362,7 @@ class ARCDataset(Dataset):
         print(f"Data loaded from RE-ARC with {len(self.samples)} total samples.")
         return None
 
-    
+
 def build_dataloaders(
     args: argparse.Namespace,
     *,
@@ -325,7 +377,6 @@ def build_dataloaders(
         extra_roots = [Path(args.rearc_path)]
         if args.rearc_limit >= 0:
             extra_limit = args.rearc_limit
-
 
     train_split = getattr(args, "train_split", "training")
     train_dataset = ARCDataset(
@@ -385,4 +436,11 @@ def build_dataloaders(
     else:
         eval_dataset = None
 
-    return train_dataset, train_loader, eval_dataset, eval_loader, train_sampler, eval_sampler
+    return (
+        train_dataset,
+        train_loader,
+        eval_dataset,
+        eval_loader,
+        train_sampler,
+        eval_sampler,
+    )

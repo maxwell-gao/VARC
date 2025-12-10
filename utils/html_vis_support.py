@@ -11,12 +11,12 @@ def _build_color_class_styles():
         css_chunks.append(f".c{idx}{{background-color:{color};}}")
     return "".join(css_chunks)
 
+
 def _grid_to_html_table(grid, title, allow_html_title=False):
     safe_title = title if allow_html_title else html.escape(title)
     if not grid:
         return (
-            f"<div class='grid'><h4>{safe_title}</h4>"
-            "<p class='empty'>No data</p></div>"
+            f"<div class='grid'><h4>{safe_title}</h4><p class='empty'>No data</p></div>"
         )
 
     rows = []
@@ -107,9 +107,15 @@ def render_results_html(tasks_payload, metrics, html_path: Path):
     if sorted_tasks:
         lines.append("<div class='filters'>")
         lines.append("<span class='filter-label'>Filter tasks:</span>")
-        lines.append("<button class='filter-button active' data-filter='all'>All</button>")
-        lines.append("<button class='filter-button' data-filter='correct'>Correct only</button>")
-        lines.append("<button class='filter-button' data-filter='failed'>Failed only</button>")
+        lines.append(
+            "<button class='filter-button active' data-filter='all'>All</button>"
+        )
+        lines.append(
+            "<button class='filter-button' data-filter='correct'>Correct only</button>"
+        )
+        lines.append(
+            "<button class='filter-button' data-filter='failed'>Failed only</button>"
+        )
         lines.append("</div>")
 
     for idx, task_name in enumerate(sorted_tasks, start=1):
@@ -156,10 +162,14 @@ def render_results_html(tasks_payload, metrics, html_path: Path):
             lines.append(
                 f"<button class='toggle-train' data-target='{escaped_container_id}'>Visualize demonstration examples</button>"
             )
-            lines.append(f"<div id='{escaped_container_id}' class='train-examples hidden'>")
+            lines.append(
+                f"<div id='{escaped_container_id}' class='train-examples hidden'>"
+            )
             for demo_idx, train_example in enumerate(train_examples, start=1):
                 safe_idx = html.escape(str(demo_idx))
-                lines.append(f"<div class='train-example'><h3>Train Example {safe_idx}</h3>")
+                lines.append(
+                    f"<div class='train-example'><h3>Train Example {safe_idx}</h3>"
+                )
                 lines.append("<div class='grids demo-line'>")
                 lines.append(_grid_to_html_table(train_example.get("input"), "Input"))
                 lines.append(_grid_to_html_table(train_example.get("output"), "Output"))
@@ -170,7 +180,9 @@ def render_results_html(tasks_payload, metrics, html_path: Path):
             lines.append(f"<div class='example'><h3>Example {safe_example}</h3>")
             lines.append("<div class='grids'>")
             lines.append(_grid_to_html_table(example_data.get("input"), "Input"))
-            lines.append(_grid_to_html_table(example_data.get("answer"), "Ground Truth"))
+            lines.append(
+                _grid_to_html_table(example_data.get("answer"), "Ground Truth")
+            )
             if majority_results:
                 for rank_idx, entry in enumerate(majority_results[:2], start=1):
                     is_correct = bool(entry.get("matches_answer"))

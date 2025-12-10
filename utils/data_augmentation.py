@@ -1,4 +1,5 @@
 """Utility helpers for augmenting ARC raw data files."""
+
 from __future__ import annotations
 
 import json
@@ -160,7 +161,6 @@ def augment_raw_data_split_per_task(
     if not all_files:
         raise RuntimeError(f"No JSON task files found under {source_dir}")
 
-    
     if only_basic:
         augmenters_to_use: Iterable[Augmenter] = get_basic_augmenters()
     elif augmenters is None:
@@ -170,7 +170,7 @@ def augment_raw_data_split_per_task(
             include_chain=include_chain,
             include_repeat=include_repeat,
             include_concat=include_concat,
-            include_random_translate=include_random_translate
+            include_random_translate=include_random_translate,
         )
     else:
         augmenters_to_use = augmenters
@@ -314,11 +314,9 @@ def augment_raw_data_split_per_task(
                                     f"[augment] Skipping color permutation {perm_idx + 1} for {task_path.name} with {augmenter} (test #{variant_idx}): {exc}"
                                 )
                             break
-                        
 
                     permuted_task.name = f"{base_name}_{slug}_perm{perm_idx + 1}"
                     permuted_variants.append(permuted_task)
-                    
 
                 if not perm_success:
                     continue
@@ -355,7 +353,6 @@ def augment_raw_data_split_per_task(
                 saved_paths.append(perm_output_path)
 
                 total_augments += 1
-                
 
                 if not dry_run:
                     with perm_output_path.open("w") as fh:

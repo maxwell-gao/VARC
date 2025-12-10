@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, Optional, Tuple
 import numpy as np
+
 # from analysis import analyze_data
 from utils.analyze_prediction import analyze_data
 import torch
@@ -28,6 +29,7 @@ COLOR_PALETTE = [
     # Border token color
     "#FFFFFF",
 ]
+
 
 def _identity_transform(grid):
     return grid
@@ -88,10 +90,7 @@ def _apply_color_map_to_grid(grid, inverse_color_map: Optional[Dict[int, int]]):
     else:
         iterable = grid
 
-    return [
-        [inverse_color_map.get(value, value) for value in row]
-        for row in iterable
-    ]
+    return [[inverse_color_map.get(value, value) for value in row] for row in iterable]
 
 
 def _undo_eval_rot_grid(grid, suffix: str):
@@ -148,6 +147,7 @@ def get_majority_vote(predictions):
     ]
     return sorted_lists
 
+
 @torch.no_grad()
 def generate_predictions(
     model: torch.nn.Module,
@@ -161,7 +161,7 @@ def generate_predictions(
     fix_scale_factor: int = 1,
     disable_translation: bool = False,
     if_fix_scale: bool = False,
-    save_name = "ttt_eval",
+    save_name="ttt_eval",
     task_type: str = "ARC-AGI",
 ) -> None:
     model.eval()
@@ -200,8 +200,8 @@ def generate_predictions(
             inputs = batch["inputs"].to(device)
             attention_mask = batch["attention_mask"].to(device)
             task_ids = batch["task_ids"].to(device)
-            offsets = batch['offset'].to(device)
-            scale_factors = batch['scale_factors'].to(device)
+            offsets = batch["offset"].to(device)
+            scale_factors = batch["scale_factors"].to(device)
 
             logits = model(inputs, task_ids, attention_mask=attention_mask)
             preds = logits.argmax(dim=1).cpu()
@@ -225,7 +225,7 @@ def generate_predictions(
                 task_predictions = answer_set.setdefault(base_task_name, {})
                 if cur_index not in task_predictions:
                     task_predictions[cur_index] = []
-              
+
                 try:
                     # Crop out the prediction from the canvas based on offset and border token
                     offset_x, offset_y = offsets[idx]
@@ -233,9 +233,15 @@ def generate_predictions(
                     np_predict_grid = np_predict[offset_y:, offset_x:]
                     # Calculate the actual length of x and y by finding the first PAD_INDEX token
                     len_x, len_y = 0, 0
-                    while len_x < np_predict_grid.shape[1] and np_predict_grid[0][len_x] != PAD_INDEX:
+                    while (
+                        len_x < np_predict_grid.shape[1]
+                        and np_predict_grid[0][len_x] != PAD_INDEX
+                    ):
                         len_x += 1
-                    while len_y < np_predict_grid.shape[0] and np_predict_grid[len_y][0] != PAD_INDEX:
+                    while (
+                        len_y < np_predict_grid.shape[0]
+                        and np_predict_grid[len_y][0] != PAD_INDEX
+                    ):
                         len_y += 1
                     predict_grid = np_predict_grid[:len_y, :len_x].tolist()
                     predict_grid = undo_fn(predict_grid)
@@ -248,7 +254,9 @@ def generate_predictions(
                                 block = []
                                 for di in range(scale_factor):
                                     for dj in range(scale_factor):
-                                        if i + di < len(predict_grid) and j + dj < len(predict_grid[0]):
+                                        if i + di < len(predict_grid) and j + dj < len(
+                                            predict_grid[0]
+                                        ):
                                             block.append(predict_grid[i + di][j + dj])
                                 if block:
                                     counts = np.bincount(block)
@@ -271,9 +279,8 @@ def generate_predictions(
 
     assert len(answer_set.keys()) == 1, "Only support one task for TTT evaluation."
     task_name = list(answer_set.keys())[0]
-    os.makedirs(f'outputs/{save_name}', exist_ok=True)
-    with open(f'outputs/{save_name}/{task_name}_predictions.json', 'w') as f:
+    os.makedirs(f"outputs/{save_name}", exist_ok=True)
+    with open(f"outputs/{save_name}/{task_name}_predictions.json", "w") as f:
         json.dump(answer_set[task_name], f)
-    
+
     analyze_data(answer_set, list(answer_set.keys()), task_type)
-   

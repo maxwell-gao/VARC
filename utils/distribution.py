@@ -4,7 +4,10 @@ import torch
 import torch.distributed as dist
 from typing import Tuple
 
-def init_distributed_mode(args: argparse.Namespace) -> Tuple[bool, int, int, int, torch.device]:
+
+def init_distributed_mode(
+    args: argparse.Namespace,
+) -> Tuple[bool, int, int, int, torch.device]:
     env_world_size = int(os.environ.get("WORLD_SIZE", "1"))
     distributed = args.distributed or env_world_size > 1
     rank = 0
@@ -16,7 +19,9 @@ def init_distributed_mode(args: argparse.Namespace) -> Tuple[bool, int, int, int
         return False, rank, world_size, local_rank, device
 
     if not dist.is_available():
-        raise RuntimeError("torch.distributed is not available but distributed training was requested.")
+        raise RuntimeError(
+            "torch.distributed is not available but distributed training was requested."
+        )
 
     backend = "nccl"
     if backend == "nccl" and not torch.cuda.is_available():

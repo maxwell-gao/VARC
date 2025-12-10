@@ -42,9 +42,7 @@ def get_cosine_schedule_with_warmup(
             1, num_training_steps - num_warmup_steps
         )
 
-        cosine_lr_multiple = 0.5 * (
-            1.0 + math.cos(math.pi * num_cycles * progress * 2)
-        )
+        cosine_lr_multiple = 0.5 * (1.0 + math.cos(math.pi * num_cycles * progress * 2))
         return max(0.0, cosine_lr_multiple)
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)

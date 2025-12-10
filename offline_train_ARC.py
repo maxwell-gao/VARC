@@ -29,6 +29,7 @@ def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
+
 @torch.no_grad()
 def evaluate(
     model: torch.nn.Module,
@@ -87,7 +88,9 @@ def evaluate(
 
             input_grid = inputs[idx]
             mask = attention_mask[idx]
-            visualizations[task_ids[idx].item()] = grid_to_pil(mask, input_grid, target, prediction, IGNORE_INDEX=IGNORE_INDEX)
+            visualizations[task_ids[idx].item()] = grid_to_pil(
+                mask, input_grid, target, prediction, IGNORE_INDEX=IGNORE_INDEX
+            )
 
     if distributed and dist.is_initialized():
         totals = torch.tensor(
@@ -107,11 +110,19 @@ def evaluate(
         dataset.enable_resolution_augmentation()
     return avg_loss, accuracy, visualizations
 
+
 def train(args: argparse.Namespace) -> None:
     distributed, rank, world_size, local_rank, device = init_distributed_mode(args)
     set_seed(args.seed + (rank if distributed else 0))
 
-    train_dataset, train_loader, eval_dataset, eval_loader, train_sampler, eval_sampler = build_dataloaders(
+    (
+        train_dataset,
+        train_loader,
+        eval_dataset,
+        eval_loader,
+        train_sampler,
+        eval_sampler,
+    ) = build_dataloaders(
         args,
         distributed=distributed,
         rank=rank,
@@ -128,9 +139,13 @@ def train(args: argparse.Namespace) -> None:
             eval_dataset.enable_translation()
 
     if args.disable_resolution_augmentation:
-        train_dataset.disable_resolution_augmentation(fix_scale_factor=args.fix_scale_factor)
+        train_dataset.disable_resolution_augmentation(
+            fix_scale_factor=args.fix_scale_factor
+        )
         if eval_dataset is not None:
-            eval_dataset.disable_resolution_augmentation(fix_scale_factor=args.fix_scale_factor)
+            eval_dataset.disable_resolution_augmentation(
+                fix_scale_factor=args.fix_scale_factor
+            )
     else:
         train_dataset.enable_resolution_augmentation()
         if eval_dataset is not None:
@@ -142,9 +157,16 @@ def train(args: argparse.Namespace) -> None:
         print(f"Total training examples: {total_train_examples}")
 
     model, model_for_eval, optimizer, scaler, scheduler, start_epoch = load_models(
-        args=args, train_dataset=train_dataset, device=device, distributed=distributed, rank=rank, local_rank=local_rank
+        args=args,
+        train_dataset=train_dataset,
+        device=device,
+        distributed=distributed,
+        rank=rank,
+        local_rank=local_rank,
     )
-    autocast_device_type = device.type if device.type in {"cuda", "cpu", "mps"} else "cuda"
+    autocast_device_type = (
+        device.type if device.type in {"cuda", "cpu", "mps"} else "cuda"
+    )
 
     wandb_run = None
     is_main_process = (not distributed) or rank == 0
@@ -188,9 +210,11 @@ def train(args: argparse.Namespace) -> None:
                 task_ids = batch["task_ids"].to(device)
 
                 optimizer.zero_grad(set_to_none=True)
-                
+
                 # Use automatic mixed precision
-                with autocast(device_type=autocast_device_type, enabled=scaler.is_enabled()):
+                with autocast(
+                    device_type=autocast_device_type, enabled=scaler.is_enabled()
+                ):
                     logits = model(inputs, task_ids, attention_mask=attention_mask)
                     num_colors = logits.size(1)
                     logits_flat = logits.permute(0, 2, 3, 1).reshape(-1, num_colors)
@@ -216,11 +240,11 @@ def train(args: argparse.Namespace) -> None:
 
                 # Backward pass with gradient scaling
                 scaler.scale(loss).backward()
-                
+
                 # Unscale gradients before clipping
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-                
+
                 # Optimizer step with scaler
                 scaler.step(optimizer)
                 scaler.update()
@@ -228,7 +252,9 @@ def train(args: argparse.Namespace) -> None:
                 running_loss += loss.item() * batch_size
                 sample_count += batch_size
 
-                if total_batches > 0 and is_main_process and step % 10 == 0:  # Update every 10 steps
+                if (
+                    total_batches > 0 and is_main_process and step % 10 == 0
+                ):  # Update every 10 steps
                     elapsed = time.time() - epoch_start
                     avg_step_time = elapsed / step
                     steps_completed = previous_total_steps + step
@@ -260,7 +286,12 @@ def train(args: argparse.Namespace) -> None:
             )
             if distributed and dist.is_initialized():
                 dist.all_reduce(train_totals, op=dist.ReduceOp.SUM)
-            running_loss_total, sample_count_total, train_exact_total, train_examples_total = train_totals.tolist()
+            (
+                running_loss_total,
+                sample_count_total,
+                train_exact_total,
+                train_examples_total,
+            ) = train_totals.tolist()
             avg_train_loss = running_loss_total / max(sample_count_total, 1)
             train_acc = train_exact_total / max(train_examples_total, 1)
 
@@ -279,20 +310,26 @@ def train(args: argparse.Namespace) -> None:
                 f"eta_total={_format_eta(total_eta)}",
             ]
 
-            current_lr = optimizer.param_groups[0]["lr"] if optimizer.param_groups else args.learning_rate
+            current_lr = (
+                optimizer.param_groups[0]["lr"]
+                if optimizer.param_groups
+                else args.learning_rate
+            )
             log_parts.append(f"lr={current_lr:.6f}")
 
             eval_loss = None
             eval_acc = None
             visualizations = {}
-            run_eval = eval_loader is not None 
+            run_eval = eval_loader is not None
             if run_eval:
                 eval_loss, eval_acc, visualizations = evaluate(
                     model,
                     eval_loader,
                     device,
                     distributed=distributed,
-                    resolution_factor=args.fix_scale_factor if args.disable_resolution_augmentation else 2,
+                    resolution_factor=args.fix_scale_factor
+                    if args.disable_resolution_augmentation
+                    else 2,
                 )
                 if is_main_process:
                     log_parts.append(f"eval_loss={eval_loss:.4f}")
@@ -334,8 +371,15 @@ def train(args: argparse.Namespace) -> None:
                     metrics["eval/loss"] = eval_loss
                     metrics["eval/accuracy"] = eval_acc
                     if (epoch + 1) % args.vis_every == 0:
-                        reverse_task_lookup = {v: k for k, v in eval_dataset.task_lookup.items()}
-                        metrics["visualizations/eval"] = [wandb.Image(v, mode="RGBA", caption=f"task {reverse_task_lookup[k]}") for k, v in visualizations.items()]
+                        reverse_task_lookup = {
+                            v: k for k, v in eval_dataset.task_lookup.items()
+                        }
+                        metrics["visualizations/eval"] = [
+                            wandb.Image(
+                                v, mode="RGBA", caption=f"task {reverse_task_lookup[k]}"
+                            )
+                            for k, v in visualizations.items()
+                        ]
                 if best_eval_acc > float("-inf"):
                     metrics["eval/best_accuracy"] = best_eval_acc
                 wandb.log(metrics, step=epoch)
@@ -352,14 +396,16 @@ def train(args: argparse.Namespace) -> None:
     if args.save_path and is_main_process:
         save_path = Path(args.save_path)
         save_path.parent.mkdir(parents=True, exist_ok=True)
-        final_payload = {"model_state": model_for_eval.state_dict(), "config": vars(args)}
+        final_payload = {
+            "model_state": model_for_eval.state_dict(),
+            "config": vars(args),
+        }
         if scaler.is_enabled():
             final_payload["scaler_state"] = scaler.state_dict()
         torch.save(final_payload, save_path)
 
     if distributed and dist.is_initialized():
         dist.destroy_process_group()
-
 
 
 if __name__ == "__main__":

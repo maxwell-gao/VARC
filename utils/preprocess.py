@@ -24,6 +24,7 @@ from .arclib.augmenters import (
     Transpose,
 )
 
+
 def get_basic_augmenters() -> List[Augmenter]:
     return [
         # IdentityAugmenter(),
@@ -61,14 +62,19 @@ def get_augmenters(
         else []
     )
 
-    random_translate_augmenters_to_apply = ([
-        Chain([Rotate(90), RandomTranslateXY()]),
-        Chain([Rotate(270), RandomTranslateXY()]),
-        Chain([Rotate(180), RandomTranslateXY()]),
-        Chain([Flip(0), RandomTranslateXY()]),
-        Chain([Flip(1), RandomTranslateXY()]),
-        Chain([Transpose(), RandomTranslateXY()]),
-        ]) if include_random_translate else ([]
+    random_translate_augmenters_to_apply = (
+        (
+            [
+                Chain([Rotate(90), RandomTranslateXY()]),
+                Chain([Rotate(270), RandomTranslateXY()]),
+                Chain([Rotate(180), RandomTranslateXY()]),
+                Chain([Flip(0), RandomTranslateXY()]),
+                Chain([Flip(1), RandomTranslateXY()]),
+                Chain([Transpose(), RandomTranslateXY()]),
+            ]
+        )
+        if include_random_translate
+        else ([])
     )
 
     size_augmenters_to_apply = (
@@ -122,12 +128,18 @@ def get_augmenters(
         + random_translate_augmenters_to_apply
     )
 
-    print("Augmenters to apply: ", augmenters_to_apply, "len: ", len(augmenters_to_apply))
+    print(
+        "Augmenters to apply: ", augmenters_to_apply, "len: ", len(augmenters_to_apply)
+    )
     return augmenters_to_apply
 
 
 def get_test_time_train_data(
-    original_task: Task, augmenters: List[Augmenter], n: int = 1, permute_n: int = 1, seed: int = 0
+    original_task: Task,
+    augmenters: List[Augmenter],
+    n: int = 1,
+    permute_n: int = 1,
+    seed: int = 0,
 ) -> List[Task]:
     rng = np.random.RandomState(seed)
     train_examples = original_task.train_examples.copy()
@@ -142,7 +154,11 @@ def get_test_time_train_data(
 
         for comb in combs:
             initial_tasks.append(
-                Task(name="", train_examples=[examples[j] for j in comb], test_example=examples[i])
+                Task(
+                    name="",
+                    train_examples=[examples[j] for j in comb],
+                    test_example=examples[i],
+                )
             )
 
     augmented_tasks = []
@@ -161,7 +177,9 @@ def get_test_time_train_data(
     for _ in range(permute_n):
         for task in augmented_tasks:
             if len(augmenters) != 0:
-                new_task = PermuteColors().apply_to_task(task, to_input=True, to_output=True, rng=rng)
+                new_task = PermuteColors().apply_to_task(
+                    task, to_input=True, to_output=True, rng=rng
+                )
             else:
                 new_task = task
             new_task = PermuteExamples().apply_to_task(

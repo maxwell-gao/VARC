@@ -15,9 +15,12 @@ COLORS_UINT8 = {
     10: [200, 200, 200],
     11: [255, 255, 255],
 }
-COLORS_UINT8 = np.array([COLORS_UINT8[i] for i in range(len(COLORS_UINT8.keys()))], dtype=np.uint8)
+COLORS_UINT8 = np.array(
+    [COLORS_UINT8[i] for i in range(len(COLORS_UINT8.keys()))], dtype=np.uint8
+)
 PIL_IMG_MAG = 10
 BORDER_SIZE = 4
+
 
 def _to_numpy(tensor_like):
     if tensor_like is None:
@@ -56,7 +59,9 @@ def _compute_crop(mask, *extra_masks):
     return slice(min_row, max_row), slice(min_col, max_col)
 
 
-def grid_to_pil(mask, input_grid=None, target_grid=None, pred_grid=None, IGNORE_INDEX=-100):
+def grid_to_pil(
+    mask, input_grid=None, target_grid=None, pred_grid=None, IGNORE_INDEX=-100
+):
     target_mask = None
     if target_grid is not None:
         target_mask = target_grid != IGNORE_INDEX
@@ -72,27 +77,41 @@ def grid_to_pil(mask, input_grid=None, target_grid=None, pred_grid=None, IGNORE_
 
     max_h, max_w = 32, 32
 
-    img = np.full(((max_h+8)*PIL_IMG_MAG, 3*max_w*PIL_IMG_MAG+2*BORDER_SIZE, 4), 0, dtype=np.uint8)
+    img = np.full(
+        ((max_h + 8) * PIL_IMG_MAG, 3 * max_w * PIL_IMG_MAG + 2 * BORDER_SIZE, 4),
+        0,
+        dtype=np.uint8,
+    )
     for idx, grid in enumerate([input_grid, target_grid, pred_grid]):
         if grid is None:
             continue
         grid = _to_numpy(grid)
         grid = grid.astype(int, copy=False)
-        mult_factor = min((max_h*PIL_IMG_MAG)//max(grid.shape[0], 1), (max_w*PIL_IMG_MAG)//max(grid.shape[1], 1))
+        mult_factor = min(
+            (max_h * PIL_IMG_MAG) // max(grid.shape[0], 1),
+            (max_w * PIL_IMG_MAG) // max(grid.shape[1], 1),
+        )
         mult_factor = max(mult_factor, 1)
 
         grid = np.repeat(np.repeat(grid, mult_factor, axis=0), mult_factor, axis=1)
         safe_indices = np.where((grid < 0) | (grid >= COLORS_UINT8.shape[0]), 0, grid)
         grid = COLORS_UINT8[safe_indices, :]
         grid[::mult_factor, :, :] = 100
-        grid[mult_factor-1::mult_factor, :, :] = 100
+        grid[mult_factor - 1 :: mult_factor, :, :] = 100
         grid[:, ::mult_factor, :] = 100
-        grid[:, mult_factor-1::mult_factor, :] = 100
+        grid[:, mult_factor - 1 :: mult_factor, :] = 100
 
-        start_h = ((max_h+4) * PIL_IMG_MAG - grid.shape[0])//2
-        start_w = idx * (max_w * PIL_IMG_MAG + BORDER_SIZE) + (max_w * PIL_IMG_MAG - grid.shape[1])//2
-        img[start_h:start_h + grid.shape[0], start_w:start_w + grid.shape[1], :3] = grid
-        img[start_h:start_h + grid.shape[0], start_w:start_w + grid.shape[1], -1] = 255
+        start_h = ((max_h + 4) * PIL_IMG_MAG - grid.shape[0]) // 2
+        start_w = (
+            idx * (max_w * PIL_IMG_MAG + BORDER_SIZE)
+            + (max_w * PIL_IMG_MAG - grid.shape[1]) // 2
+        )
+        img[
+            start_h : start_h + grid.shape[0], start_w : start_w + grid.shape[1], :3
+        ] = grid
+        img[
+            start_h : start_h + grid.shape[0], start_w : start_w + grid.shape[1], -1
+        ] = 255
 
     return Image.fromarray(img, mode="RGBA")
 
